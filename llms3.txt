@@ -1,45 +1,94 @@
-# jplawdb3 llms3（AI最短導線）
+# jplawdb3 llms3（One-shot Deterministic Retrieval）
 
-## 最優先原則
-AIが「最短距離で必要根拠に到達する」ことを最優先とする。
+## 目的（最優先）
+1回の指定で対象を一意に定め、最短距離で `txt` 本文へ到達する。
+揺らぎ・推測・過剰探索によるロスを禁止する。
 
 ## 設計原則（必須）
 - 1 URL <= 10,000 tokens
-- 軽量索引 -> ID確定 -> part本文 の順で進む
-- 1回答で開くURLは必要最小限にする
-- 巨大単一JSONは使わない（分割索引を使う）
-- 旧URL（`.../{id}.txt`, `.../{id}.html`）は使わない
+- 導線は固定: `alias -> resolve_lite -> parts -> text(part)`
+- 使用URLは必要最小限（不要ファイルは読まない）
+- 通常運用は `txt` のみで完結する
+- 旧単一本文URL（`.../{id}.txt`, `.../{id}.html`）は使わない
+- 曖昧入力は推測せず Fail-fast で再指定を要求する
 
-## 入口
+## One-shot Query Contract v1
+入力は次のいずれかに固定する。
+
+- 法令: `LAW:{law_code}:{article_id}`
+- 通達: `TSU:{doc_code}:{item_id}`
+
+ルール:
+- `law_code`/`doc_code` は alias 辞書の正規コードを使う
+- `article_id`/`item_id` は `resolve_lite/{code}.json` 掲載値をそのまま使う
+- あいまい一致・近似一致・自動補完は禁止
+
+## 固定探索アルゴリズム
+1. 種別判定（`LAW` または `TSU`）
+2. alias でコード検証
+3. `resolve_lite/{code}.json` で ID 検証
+4. `data/parts/.../{code}/{id}.json` で分割数を取得
+5. `text/.../part-001.txt` から必要分のみ取得
+6. 不足時のみ次 part を追加取得
+
+## Allowlist（通常運用で使ってよいもの）
+- `ai-law-db/data/law_aliases.json`
+- `ai-tsutatsu-db/data/doc_aliases.json`
+- `ai-law-db/data/resolve_lite/{law_code}.json`
+- `ai-tsutatsu-db/data/resolve_lite/{doc_code}.json`
+- `ai-law-db/data/parts/law/{law_code}/{article_id}.json`
+- `ai-tsutatsu-db/data/parts/tsutatsu/{doc_code}/{item_id}.json`
+- `ai-law-db/text/{law_code}/{article_id}/part-{part}.txt`
+- `ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
+
+## Denylist（通常運用で使わないもの）
+- `enhanced/*.html`（通常不要）
+- `resolve_meta*`（通常不要）
+- `sitemap*`（探索起点にしない）
+- 廃止済み旧URL
+
+## Fail-fast 仕様（曖昧時）
+入力が契約に合わない場合、探索せず次を返す。
+
+- `ERROR: INVALID_QUERY_FORMAT`
+- `EXPECTED: LAW:{law_code}:{article_id} | TSU:{doc_code}:{item_id}`
+- `MISSING_OR_INVALID: <field>`
+- `NEXT_ACTION: 正規コードとIDを1回で指定してください`
+
+## 例示（実在ID）
+### 例1: 法令
+- Query: `LAW:hojinzei:22-2`
+- Path:
+  - `ai-law-db/data/law_aliases.json`
+  - `ai-law-db/data/resolve_lite/hojinzei.json`
+  - `ai-law-db/data/parts/law/hojinzei/22-2.json`
+  - `ai-law-db/text/hojinzei/22-2/part-001.txt`
+
+### 例2: 法令
+- Query: `LAW:shotokuzei:120`
+- Path:
+  - `ai-law-db/data/law_aliases.json`
+  - `ai-law-db/data/resolve_lite/shotokuzei.json`
+  - `ai-law-db/data/parts/law/shotokuzei/120.json`
+  - `ai-law-db/text/shotokuzei/120/part-001.txt`
+
+### 例3: 通達
+- Query: `TSU:hojinzei_kihon_tsutatsu:9-3-3`
+- Path:
+  - `ai-tsutatsu-db/data/doc_aliases.json`
+  - `ai-tsutatsu-db/data/resolve_lite/hojinzei_kihon_tsutatsu.json`
+  - `ai-tsutatsu-db/data/parts/tsutatsu/hojinzei_kihon_tsutatsu/9-3-3.json`
+  - `ai-tsutatsu-db/text/hojinzei_kihon_tsutatsu/9-3-3/part-001.txt`
+
+### 例4: 通達
+- Query: `TSU:sozokuzei_kihon_tsutatsu:39-10`
+- Path:
+  - `ai-tsutatsu-db/data/doc_aliases.json`
+  - `ai-tsutatsu-db/data/resolve_lite/sozokuzei_kihon_tsutatsu.json`
+  - `ai-tsutatsu-db/data/parts/tsutatsu/sozokuzei_kihon_tsutatsu/39-10.json`
+  - `ai-tsutatsu-db/text/sozokuzei_kihon_tsutatsu/39-10/part-001.txt`
+
+## 入口URL
 - ルート: `https://jplawdb3.github.io/jplawdb3/`
-- 法令: `https://jplawdb3.github.io/jplawdb3/ai-law-db/quickstart.txt`
-- 通達: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/quickstart.txt`
-
-## 最短探索アルゴリズム
-1. 法令か通達かを判定する
-2. aliasで正規コードを確定する
-3. `resolve_lite/{code}.json` で対象ID（`article` or `item_id`）を確定する
-4. `data/parts/.../{code}/{id}.json` で part 数を把握する
-5. `part-001` から必要分だけ読む
-6. 根拠提示時は `enhanced/.../part-{part}.html#p{n}` を使う
-7. 不足時のみ隣接partを追加取得する
-
-## 法令パス（ai-law-db）
-- alias: `ai-law-db/data/law_aliases.json`
-- 索引: `ai-law-db/data/resolve_lite/{law_code}.json`
-- parts: `ai-law-db/data/parts/law/{law_code}/{article}.json`
-- 本文: `ai-law-db/text/{law_code}/{article}/part-{part}.txt`
-- 根拠: `ai-law-db/enhanced/{law_code}/{article}/part-{part}.html#p{n}`
-
-## 通達パス（ai-tsutatsu-db）
-- alias: `ai-tsutatsu-db/data/doc_aliases.json`
-- 索引: `ai-tsutatsu-db/data/resolve_lite/{doc_code}.json`
-- parts: `ai-tsutatsu-db/data/parts/tsutatsu/{doc_code}/{item_id}.json`
-- 本文: `ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
-- 根拠: `ai-tsutatsu-db/enhanced/{doc_code}/{item_id}/part-{part}.html#p{n}`
-
-## 反パターン
-- 先に全文を取りにいく
-- alias確定前に本文探索する
-- 10k超URL前提で読む
-- モノリスJSON前提で探索する
+- 法令入口: `https://jplawdb3.github.io/jplawdb3/ai-law-db/quickstart.txt`
+- 通達入口: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/quickstart.txt`
