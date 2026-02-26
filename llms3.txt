@@ -1,14 +1,75 @@
-# jplawdb3 llms3
+# jplawdb3 / llms3
 
-## 設計原則
+このファイルは、jplawdb3 全体の導線、設計原則、調査方法論をまとめた最上位ガイドです。
+
+## 0. 入口URL
+- ルート: `https://jplawdb3.github.io/jplawdb3/`
+- 法令入口: `https://jplawdb3.github.io/jplawdb3/ai-law-db/quickstart.txt`
+- 通達入口: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/quickstart.txt`
+
+## 1. 全体像
+jplawdb3 は以下 2 系統で構成されます。
+
+- `ai-law-db`: 法令（条文）データ
+- `ai-tsutatsu-db`: 税務通達データ
+
+どちらも共通して「軽量索引 -> 個別ID確定 -> part本文取得」の三段構成です。
+
+## 2. 設計原則（必須）
 - 1 URL <= 10,000 tokens
-- 軽い索引で絞る -> 本文 part へ最短到達
-- 巨大単一JSONは公開しない
+- 軽い索引で候補を絞ってから本文 part に進む
+- 巨大単一JSONを公開しない（分割索引を使う）
+- 旧URL（`.../{id}.txt`, `.../{id}.html`）は使わない
+- 参照は常に最小URL集合で行う
 
-## 入口
-- `ai-law-db/quickstart.txt`
-- `ai-tsutatsu-db/quickstart.txt`
+## 3. 取得対象の使い分け
+- 本文（読解用）: `text/.../part-XXX.txt`
+- 根拠（段落アンカー付き）: `enhanced/.../part-XXX.html#p{n}`
+- 分割情報: `data/parts/.../{id}.json`
+- 候補抽出: `data/resolve_lite/...`
 
-## 主要テンプレート
-- law text: `ai-law-db/text/{law_code}/{article}/part-{part}.txt`
-- tsutatsu text: `ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
+## 4. 調査方法論（標準フロー）
+次の順で探索すると、再現性と効率が両立します。
+
+1. まず対象を分類する（法令か、通達か）
+2. alias辞書でコードを確定する
+3. resolve_liteで条・項目IDを確定する
+4. partsマニフェストで分割数を確認する
+5. `part-001` から順に必要範囲だけ読む
+6. 根拠提示が必要なら `enhanced` の該当 `#p` を引用する
+7. 追加調査が必要なら隣接IDまたは近接partのみ拡張する
+
+## 5. 法令の具体パス
+- alias: `ai-law-db/data/law_aliases.json`
+- 入口索引: `ai-law-db/data/resolve_lite/index.json`
+- 法令別索引: `ai-law-db/data/resolve_lite/{law_code}.json`
+- 分割索引: `ai-law-db/data/parts/law/{law_code}/{article}.json`
+- 本文: `ai-law-db/text/{law_code}/{article}/part-{part}.txt`
+- 根拠: `ai-law-db/enhanced/{law_code}/{article}/part-{part}.html#p{n}`
+
+## 6. 通達の具体パス
+- alias: `ai-tsutatsu-db/data/doc_aliases.json`
+- 入口索引: `ai-tsutatsu-db/data/resolve_lite/index.json`
+- 文書別索引: `ai-tsutatsu-db/data/resolve_lite/{doc_code}.json`
+- 分割索引: `ai-tsutatsu-db/data/parts/tsutatsu/{doc_code}/{item_id}.json`
+- 本文: `ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
+- 根拠: `ai-tsutatsu-db/enhanced/{doc_code}/{item_id}/part-{part}.html#p{n}`
+
+## 7. 実務上の読み方ルール
+- 先に全文取得しない。まず索引で対象を絞る。
+- 1回の回答で使うURL数を必要最小限に保つ。
+- `split: true` の索引は `parts_index` を辿って項目集合を復元する。
+- 根拠提示は `enhanced` の段落アンカーを優先する。
+- 不確実な場合は、断定せず追加partを取得して確認する。
+
+## 8. 非推奨パターン
+- `resolve.json` のような巨大モノリス前提の探索
+- 旧単一本文URLへの依存
+- alias未確定のまま本文探索を始めること
+- 10k超URLを前提にした一括読み込み
+
+## 9. 最短レシピ
+- 法令を調べる: `ai-law-db/quickstart.txt` を起点に `law_code -> article -> part` の順
+- 通達を調べる: `ai-tsutatsu-db/quickstart.txt` を起点に `doc_code -> item_id -> part` の順
+
+以上を jplawdb3 の標準導線とする。
