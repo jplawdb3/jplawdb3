@@ -1,0 +1,14 @@
+# jplawdb3 llms3
+
+## 設計原則
+- 1 URL <= 10,000 tokens
+- 軽い索引で絞る -> 本文 part へ最短到達
+- 巨大単一JSONは公開しない
+
+## 入口
+- `ai-law-db/quickstart.txt`
+- `ai-tsutatsu-db/quickstart.txt`
+
+## 主要テンプレート
+- law text: `ai-law-db/text/{law_code}/{article}/part-{part}.txt`
+- tsutatsu text: `ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
