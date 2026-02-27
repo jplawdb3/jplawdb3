@@ -3,5 +3,6 @@
 このDBの導線は `../llms3.txt` を唯一の基準とする。
 
 - Query: `TSU:{doc_code}:{item_id}`
+- parts: `data/parts/tsutatsu/{doc_code}/{item_id}.json`
 - 本文: `text/{doc_code}/{item_id}/part-{part}.txt`
-- 停止条件: 次partが404
+- 停止条件: `part == text_parts`

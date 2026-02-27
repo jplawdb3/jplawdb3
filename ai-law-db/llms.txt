@@ -3,5 +3,6 @@
 このDBの導線は `../llms3.txt` を唯一の基準とする。
 
 - Query: `LAW:{law_code}:{article_id}`
+- parts: `data/parts/law/{law_code}/{article_id}.json`
 - 本文: `text/{law_code}/{article_id}/part-{part}.txt`
-- 停止条件: 次partが404
+- 停止条件: `part == text_parts`

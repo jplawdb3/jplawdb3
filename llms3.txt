@@ -23,13 +23,16 @@
 
 ### Recipe A: IDが完全指定（最優先）
 1) `LAW` か `TSU` を判定
-2) `part-001` を取得
-3) 必要時のみ `part-002` 以降を取得
-4) 次partが404なら停止
+2) `data/parts/law/{law_code}/{article_id}.json` または `data/parts/tsutatsu/{doc_code}/{item_id}.json` を1回取得して `*_parts` を確認
+3) `part-001` から `part-{max}` まで取得（404停止に依存しない）
 
 本文URL:
 - 法令: `https://jplawdb3.github.io/jplawdb3/ai-law-db/text/{law_code}/{article_id}/part-{part}.txt`
 - 通達: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
+
+parts URL:
+- 法令: `https://jplawdb3.github.io/jplawdb3/ai-law-db/data/parts/law/{law_code}/{article_id}.json`
+- 通達: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/data/parts/tsutatsu/{doc_code}/{item_id}.json`
 
 ### Recipe B: codeは分かるがIDが揺れる
 1) `resolve_lite/{code}.json` を1回読む
@@ -72,9 +75,10 @@
 - `EXPECTED: LAW:{law_code}:{article_id} | TSU:{doc_code}:{item_id}`
 
 ## 6. 使用URLの優先順位
-1) 本文 `text/.../part-001.txt`（最優先）
-2) `resolve_lite/{code}.json`（ID揺らぎ時のみ）
-3) `law_aliases.json` / `doc_aliases.json`（code揺らぎ時のみ）
+1) `data/parts/law/{law_code}/{article_id}.json` または `data/parts/tsutatsu/{doc_code}/{item_id}.json`（取得上限確定）
+2) `text/{law_code|doc_code}/{article_id|item_id}/part-001.txt` 以降
+3) `resolve_lite/{code}.json`（ID揺らぎ時のみ）
+4) `law_aliases.json` / `doc_aliases.json`（code揺らぎ時のみ）
 
 通常運用で使わない:
 - `enhanced/*.html`
@@ -83,13 +87,17 @@
 
 ## 7. 例（実在ID）
 - `LAW:hojinzei:22-2`
-  - `.../ai-law-db/text/hojinzei/22-2/part-001.txt`
+  - `https://jplawdb3.github.io/jplawdb3/ai-law-db/data/parts/law/hojinzei/22-2.json`
+  - `https://jplawdb3.github.io/jplawdb3/ai-law-db/text/hojinzei/22-2/part-001.txt`
 - `LAW:shotokuzei:120`
-  - `.../ai-law-db/text/shotokuzei/120/part-001.txt`
+  - `https://jplawdb3.github.io/jplawdb3/ai-law-db/data/parts/law/shotokuzei/120.json`
+  - `https://jplawdb3.github.io/jplawdb3/ai-law-db/text/shotokuzei/120/part-001.txt`
 - `TSU:hojinzei_kihon_tsutatsu:9-3-3`
-  - `.../ai-tsutatsu-db/text/hojinzei_kihon_tsutatsu/9-3-3/part-001.txt`
+  - `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/data/parts/tsutatsu/hojinzei_kihon_tsutatsu/9-3-3.json`
+  - `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/text/hojinzei_kihon_tsutatsu/9-3-3/part-001.txt`
 - `TSU:sozokuzei_kihon_tsutatsu:39-10`
-  - `.../ai-tsutatsu-db/text/sozokuzei_kihon_tsutatsu/39-10/part-001.txt`
+  - `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/data/parts/tsutatsu/sozokuzei_kihon_tsutatsu/39-10.json`
+  - `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/text/sozokuzei_kihon_tsutatsu/39-10/part-001.txt`
 
 ## 8. 入口
 - ルート: `https://jplawdb3.github.io/jplawdb3/`

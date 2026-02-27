@@ -2,6 +2,7 @@
 
 - 運用導線は `../llms3.txt` に統一
 - 入力契約: `TSU:{doc_code}:{item_id}`
+- まず `data/parts/tsutatsu/{doc_code}/{item_id}.json` で `text_parts` を確認
 - 本文URL: `text/{doc_code}/{item_id}/part-{part}.txt`
-- 読み方: `part-001` から順次取得し、404で停止
+- 読み方: `part-001` から `part-{text_parts}` まで取得
 - Fail-fast: 形式不正・ID不正は推測せず再指定要求
