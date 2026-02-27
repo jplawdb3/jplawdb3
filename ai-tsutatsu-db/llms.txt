@@ -1,13 +1,7 @@
-# AI向け 日本税務通達（10k制約版）
+# ai-tsutatsu-db llms (Minimal)
 
-- 入口: `quickstart.txt`
-- 最軽量索引: `data/resolve_lite/index.json`
-- 分割索引: `data/parts/tsutatsu/{doc_code}/{item_id}.json`
+このDBの導線は `../llms3.txt` を唯一の基準とする。
 
-## URL
-- text: `text/{doc_code}/{item_id}/part-{part}.txt`
-- html: `enhanced/{doc_code}/{item_id}/part-{part}.html`
-
-## 方針
-- 1URL <= 10,000 tokens
-- 軽量索引 -> 本文 part の順で読む
+- Query: `TSU:{doc_code}:{item_id}`
+- 本文: `text/{doc_code}/{item_id}/part-{part}.txt`
+- 停止条件: 次partが404

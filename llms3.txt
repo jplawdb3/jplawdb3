@@ -1,94 +1,45 @@
-# jplawdb3 llms3（One-shot Deterministic Retrieval）
+# jplawdb3 llms3 (Minimal Routing)
 
-## 目的（最優先）
-1回の指定で対象を一意に定め、最短距離で `txt` 本文へ到達する。
-揺らぎ・推測・過剰探索によるロスを禁止する。
+## 目的
+1回の指定で対象を確定し、最短で本文 `txt` に到達する。
+法律・通達データ本体は保持し、導線だけ最小化する。
 
-## 設計原則（必須）
-- 1 URL <= 10,000 tokens
-- 導線は固定: `alias -> resolve_lite -> parts -> text(part)`
-- 使用URLは必要最小限（不要ファイルは読まない）
-- 通常運用は `txt` のみで完結する
-- 旧単一本文URL（`.../{id}.txt`, `.../{id}.html`）は使わない
-- 曖昧入力は推測せず Fail-fast で再指定を要求する
+## 最小導線（通常運用はこれだけ）
+1. クエリを1行で指定する
+2. `text/.../part-001.txt` を取得する
+3. 必要なら `part-002`, `part-003` ... を順に取得する
+4. 404になったら終了する
 
-## One-shot Query Contract v1
-入力は次のいずれかに固定する。
-
+## Query Contract v2
 - 法令: `LAW:{law_code}:{article_id}`
 - 通達: `TSU:{doc_code}:{item_id}`
 
-ルール:
-- `law_code`/`doc_code` は alias 辞書の正規コードを使う
-- `article_id`/`item_id` は `resolve_lite/{code}.json` 掲載値をそのまま使う
-- あいまい一致・近似一致・自動補完は禁止
+## 直接本文URLテンプレート
+- 法令本文: `https://jplawdb3.github.io/jplawdb3/ai-law-db/text/{law_code}/{article_id}/part-{part}.txt`
+- 通達本文: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
 
-## 固定探索アルゴリズム
-1. 種別判定（`LAW` または `TSU`）
-2. alias でコード検証
-3. `resolve_lite/{code}.json` で ID 検証
-4. `data/parts/.../{code}/{id}.json` で分割数を取得
-5. `text/.../part-001.txt` から必要分のみ取得
-6. 不足時のみ次 part を追加取得
+## 固定アルゴリズム（JSON探索なし）
+1. `LAW`/`TSU` を判定
+2. 上記テンプレートで `part-001` を取得
+3. 追加読込が必要なときだけ次partへ進む
+4. 404で停止
 
-## Allowlist（通常運用で使ってよいもの）
-- `ai-law-db/data/law_aliases.json`
-- `ai-tsutatsu-db/data/doc_aliases.json`
-- `ai-law-db/data/resolve_lite/{law_code}.json`
-- `ai-tsutatsu-db/data/resolve_lite/{doc_code}.json`
-- `ai-law-db/data/parts/law/{law_code}/{article_id}.json`
-- `ai-tsutatsu-db/data/parts/tsutatsu/{doc_code}/{item_id}.json`
-- `ai-law-db/text/{law_code}/{article_id}/part-{part}.txt`
-- `ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
-
-## Denylist（通常運用で使わないもの）
-- `enhanced/*.html`（通常不要）
-- `resolve_meta*`（通常不要）
-- `sitemap*`（探索起点にしない）
-- 廃止済み旧URL
-
-## Fail-fast 仕様（曖昧時）
-入力が契約に合わない場合、探索せず次を返す。
-
+## Fail-fast
 - `ERROR: INVALID_QUERY_FORMAT`
 - `EXPECTED: LAW:{law_code}:{article_id} | TSU:{doc_code}:{item_id}`
-- `MISSING_OR_INVALID: <field>`
-- `NEXT_ACTION: 正規コードとIDを1回で指定してください`
+- `NEXT_ACTION: 正規コードとIDを1回で再指定`
 
-## 例示（実在ID）
-### 例1: 法令
-- Query: `LAW:hojinzei:22-2`
-- Path:
-  - `ai-law-db/data/law_aliases.json`
-  - `ai-law-db/data/resolve_lite/hojinzei.json`
-  - `ai-law-db/data/parts/law/hojinzei/22-2.json`
-  - `ai-law-db/text/hojinzei/22-2/part-001.txt`
+## 非推奨（通常運用では使わない）
+- `resolve_*` / `alias` / `sitemap` / `enhanced` への探索
+- 曖昧一致・推測検索
+- 不要URLの横断取得
 
-### 例2: 法令
-- Query: `LAW:shotokuzei:120`
-- Path:
-  - `ai-law-db/data/law_aliases.json`
-  - `ai-law-db/data/resolve_lite/shotokuzei.json`
-  - `ai-law-db/data/parts/law/shotokuzei/120.json`
-  - `ai-law-db/text/shotokuzei/120/part-001.txt`
-
-### 例3: 通達
-- Query: `TSU:hojinzei_kihon_tsutatsu:9-3-3`
-- Path:
-  - `ai-tsutatsu-db/data/doc_aliases.json`
-  - `ai-tsutatsu-db/data/resolve_lite/hojinzei_kihon_tsutatsu.json`
-  - `ai-tsutatsu-db/data/parts/tsutatsu/hojinzei_kihon_tsutatsu/9-3-3.json`
-  - `ai-tsutatsu-db/text/hojinzei_kihon_tsutatsu/9-3-3/part-001.txt`
-
-### 例4: 通達
-- Query: `TSU:sozokuzei_kihon_tsutatsu:39-10`
-- Path:
-  - `ai-tsutatsu-db/data/doc_aliases.json`
-  - `ai-tsutatsu-db/data/resolve_lite/sozokuzei_kihon_tsutatsu.json`
-  - `ai-tsutatsu-db/data/parts/tsutatsu/sozokuzei_kihon_tsutatsu/39-10.json`
-  - `ai-tsutatsu-db/text/sozokuzei_kihon_tsutatsu/39-10/part-001.txt`
-
-## 入口URL
-- ルート: `https://jplawdb3.github.io/jplawdb3/`
-- 法令入口: `https://jplawdb3.github.io/jplawdb3/ai-law-db/quickstart.txt`
-- 通達入口: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/quickstart.txt`
+## 例
+- `LAW:hojinzei:22-2`
+  - `.../ai-law-db/text/hojinzei/22-2/part-001.txt`
+- `LAW:shotokuzei:120`
+  - `.../ai-law-db/text/shotokuzei/120/part-001.txt`
+- `TSU:hojinzei_kihon_tsutatsu:9-3-3`
+  - `.../ai-tsutatsu-db/text/hojinzei_kihon_tsutatsu/9-3-3/part-001.txt`
+- `TSU:sozokuzei_kihon_tsutatsu:39-10`
+  - `.../ai-tsutatsu-db/text/sozokuzei_kihon_tsutatsu/39-10/part-001.txt`

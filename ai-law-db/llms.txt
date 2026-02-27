@@ -1,14 +1,7 @@
-# AI向け 日本法（10k制約版）
+# ai-law-db llms (Minimal)
 
-- 入口: `quickstart.txt`
-- 最軽量索引: `data/resolve_lite/index.json`
-- 条文タイトル索引: `data/resolve_meta_corp/index.json`
-- 分割索引: `data/parts/law/{law_code}/{article}.json`
+このDBの導線は `../llms3.txt` を唯一の基準とする。
 
-## URL
-- text: `text/{law_code}/{article}/part-{part}.txt`
-- html: `enhanced/{law_code}/{article}/part-{part}.html`
-
-## 方針
-- 1URL <= 10,000 tokens
-- 軽い索引で絞る -> 本文 part へ最短到達
+- Query: `LAW:{law_code}:{article_id}`
+- 本文: `text/{law_code}/{article_id}/part-{part}.txt`
+- 停止条件: 次partが404
