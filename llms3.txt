@@ -1,40 +1,87 @@
-# jplawdb3 llms3 (Minimal Routing)
+# jplawdb3 llms3（AI検索ガイド / 実務レシピ）
 
-## 目的
-1回の指定で対象を確定し、最短で本文 `txt` に到達する。
-法律・通達データ本体は保持し、導線だけ最小化する。
+## 0. 目的
+初見のAIでも、最小手順で法律・通達本文（txt）へ到達する。
 
-## 最小導線（通常運用はこれだけ）
-1. クエリを1行で指定する
-2. `text/.../part-001.txt` を取得する
-3. 必要なら `part-002`, `part-003` ... を順に取得する
-4. 404になったら終了する
+- 優先目標: 1回で対象確定（One-shot）
+- 次善目標: 揺らぎがあるときだけ最小限の解決URLを追加
 
-## Query Contract v2
+## 1. 設計原則（必須）
+- 1 URL <= 10,000 tokens
+- まず本文 `txt` 直アクセスを試す
+- 迷ったときだけ `alias` / `resolve_lite` を使う
+- 推測で広く探索しない（不要URLを開かない）
+- 根拠本文は `txt` を一次ソースとする
+
+## 2. 入力契約（推奨）
 - 法令: `LAW:{law_code}:{article_id}`
 - 通達: `TSU:{doc_code}:{item_id}`
 
-## 直接本文URLテンプレート
-- 法令本文: `https://jplawdb3.github.io/jplawdb3/ai-law-db/text/{law_code}/{article_id}/part-{part}.txt`
-- 通達本文: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
+この形式が来たら、索引を読まずに本文へ直行する。
 
-## 固定アルゴリズム（JSON探索なし）
-1. `LAW`/`TSU` を判定
-2. 上記テンプレートで `part-001` を取得
-3. 追加読込が必要なときだけ次partへ進む
-4. 404で停止
+## 3. 最短検索レシピ
 
-## Fail-fast
+### Recipe A: IDが完全指定（最優先）
+1) `LAW` か `TSU` を判定
+2) `part-001` を取得
+3) 必要時のみ `part-002` 以降を取得
+4) 次partが404なら停止
+
+本文URL:
+- 法令: `https://jplawdb3.github.io/jplawdb3/ai-law-db/text/{law_code}/{article_id}/part-{part}.txt`
+- 通達: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/text/{doc_code}/{item_id}/part-{part}.txt`
+
+### Recipe B: codeは分かるがIDが揺れる
+1) `resolve_lite/{code}.json` を1回読む
+2) 揺らぎ正規化ルールでIDを1つに確定
+3) Recipe Aへ戻る
+
+### Recipe C: code自体が曖昧
+1) `law_aliases.json` または `doc_aliases.json` で正規コードを確定
+2) Recipe Bへ進む
+
+## 4. 揺らぎ正規化ルール（AI向け）
+
+### 法令（article_id）
+- 全角数字 -> 半角
+- `第` `条` `項` `号` は除去
+- `の` は `-` に変換
+- 空白・全角ハイフン類は `-` に統一
+
+例:
+- `第66条の7` -> `66-7`
+- `第120条` -> `120`
+- `39の10` -> `39-10`
+
+### 通達（item_id）
+- 区切りは半角 `-` に統一
+- 全角数字 -> 半角
+- 連番記法のゆれ（`9の3の3` など）は `9-3-3` へ統一
+
+## 5. 曖昧時のFail-fast（迷走防止）
+正規化後も一意に決まらない場合は、探索を止めて次を返す。
+
+- `ERROR: AMBIGUOUS_ID`
+- `TYPE: LAW | TSU`
+- `CODE: <normalized_code_or_unknown>`
+- `CANDIDATES: [id1, id2, ...]`（最大5件）
+- `NEXT_ACTION: 正規コードとIDを1つに確定して再指定`
+
+形式不正の場合:
 - `ERROR: INVALID_QUERY_FORMAT`
 - `EXPECTED: LAW:{law_code}:{article_id} | TSU:{doc_code}:{item_id}`
-- `NEXT_ACTION: 正規コードとIDを1回で再指定`
 
-## 非推奨（通常運用では使わない）
-- `resolve_*` / `alias` / `sitemap` / `enhanced` への探索
-- 曖昧一致・推測検索
-- 不要URLの横断取得
+## 6. 使用URLの優先順位
+1) 本文 `text/.../part-001.txt`（最優先）
+2) `resolve_lite/{code}.json`（ID揺らぎ時のみ）
+3) `law_aliases.json` / `doc_aliases.json`（code揺らぎ時のみ）
 
-## 例
+通常運用で使わない:
+- `enhanced/*.html`
+- `resolve_meta*`
+- `sitemap*`
+
+## 7. 例（実在ID）
 - `LAW:hojinzei:22-2`
   - `.../ai-law-db/text/hojinzei/22-2/part-001.txt`
 - `LAW:shotokuzei:120`
@@ -43,3 +90,8 @@
   - `.../ai-tsutatsu-db/text/hojinzei_kihon_tsutatsu/9-3-3/part-001.txt`
 - `TSU:sozokuzei_kihon_tsutatsu:39-10`
   - `.../ai-tsutatsu-db/text/sozokuzei_kihon_tsutatsu/39-10/part-001.txt`
+
+## 8. 入口
+- ルート: `https://jplawdb3.github.io/jplawdb3/`
+- 法令quickstart: `https://jplawdb3.github.io/jplawdb3/ai-law-db/quickstart.txt`
+- 通達quickstart: `https://jplawdb3.github.io/jplawdb3/ai-tsutatsu-db/quickstart.txt`
